@@ -1,0 +1,71 @@
+.gitignore
+
+# Object files:
+*.o
+*.obj
+
+# Dependency files:
+*.d
+
+# Executables:
+*.exe
+*.out
+
+# Libraries:
+*.lib
+*.a
+
+# Static and Shared libraries:
+*.so
+*.dylib
+*.dll
+
+# Preprocessed files:
+*.i
+*.ii
+*.s
+
+# Temporary files:
+*~
+
+# Backup files:
+*.bak
+*.orig
+
+# Logs:
+*.log
+
+# Build directories:
+build/
+debug/
+release/
+cmake-build-*/
+tasks.md
+/build_test/
+
+# CMake files:
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Compile commands:
+compile_commands.json
+
+# IDE-specific files:
+.idea/
+.vscode/
+*.vs
+*.suo
+*.user
+
+# Third-party libraries:
+/third_party/
+
+# Version control system files:
+.git/
+.svn/
+.hg/
+/build_test/_deps/
