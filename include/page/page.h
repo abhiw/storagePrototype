@@ -91,10 +91,17 @@ class Page {
   void SetForwardingPointer(slot_id_t slot_id, page_id_t page_id,
                             slot_id_t target_slot_id) const;
   slot_id_t InsertTuple(const char* tuple_data, uint16_t tuple_size) const;
-  ErrorCode DeleteTuple(slot_id_t slot_id);
-  void RecomputeFragmentationStats();
+  ErrorCode DeleteTuple(slot_id_t slot_id) const;
+  void RecomputeFragmentationStats() const;
   bool ShouldCompact() const;
   void CompactPage() const;
+
+  // Update operations
+  ErrorCode UpdateTupleInPlace(slot_id_t slot_id, const char* new_data,
+                               uint16_t new_size) const;
+  ErrorCode MarkSlotForwarded(slot_id_t slot_id, page_id_t target_page_id,
+                              slot_id_t target_slot_id) const;
+  TupleId FollowForwardingChain(slot_id_t slot_id, int max_hops = 10) const;
 
  private:
   // RAII-managed pointer to the entire page buffer (8KB)

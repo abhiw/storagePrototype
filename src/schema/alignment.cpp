@@ -11,6 +11,9 @@ size_t CalculateAlignment(const DataType type) {
     case BOOLEAN:
     case TINYINT:
     case CHAR:
+    case VARCHAR:
+    case TEXT:
+    case BLOB:
       return 1;
     case SMALLINT:
       return 2;
@@ -64,9 +67,6 @@ size_t AlignOffset(size_t offset, DataType type) {
 }
 
 size_t GetFixedSize(DataType type, size_t size_param) {
-  // Determine fixed size based on DataType for fixed-length types.
-  // For CHAR, treat as fixed-length only when a positive size_param is
-  // provided.
   switch (type) {
     case BOOLEAN:
     case TINYINT:
@@ -80,11 +80,13 @@ size_t GetFixedSize(DataType type, size_t size_param) {
     case DOUBLE:
       return size_t(8);
     case CHAR:
-      // If user provided a positive size_param, treat CHAR as fixed-length
-      // of that size; otherwise it's variable-length (e.g., VARCHAR-style).
       if (size_param > 0) {
         return size_param;
       }
+      return 0;
+    case VARCHAR:
+    case TEXT:
+    case BLOB:
       return 0;
     default:
       return 0;

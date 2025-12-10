@@ -57,16 +57,14 @@ void FreeSpaceMap::UpdatePageFreeSpace(page_id_t page_id,
   // Ensure cache has space for this page
   EnsureCapacity(page_id);
 
-  // Convert available bytes to category
   uint8_t category = BytesToCategory(available_bytes);
 
-  // Update the cache
   if (page_id < fsm_cache_.size()) {
     fsm_cache_[page_id] = category;
-    allocated_pages_.insert(page_id);  // Track this page as allocated
+    // Track this page as allocated
+    allocated_pages_.insert(page_id);
     is_dirty_ = true;
 
-    // Update page_count if necessary
     if (page_id >= page_count_) {
       page_count_ = page_id + 1;
     }
@@ -82,8 +80,16 @@ page_id_t FreeSpaceMap::FindPageWithSpace(uint16_t required_bytes) {
 
   // Scan ONLY allocated pages (handles sparse allocation)
   for (page_id_t page_id : allocated_pages_) {
-    if (page_id < fsm_cache_.size() && fsm_cache_[page_id] >= min_category) {
-      return page_id;
+    if (page_id < fsm_cache_.size()) {
+      uint8_t page_category = fsm_cache_[page_id];
+
+      if (page_category > min_category) {
+        return page_id;
+      }
+
+      if (page_category == min_category && page_category > 0) {
+        return page_id;
+      }
     }
   }
 

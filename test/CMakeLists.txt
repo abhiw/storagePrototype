@@ -12,6 +12,15 @@ set(TEST_CLASSES
         disk_manager_test disk_manager_test.cpp
         free_space_map_test free_space_map_test.cpp
         page_compaction_test page_compaction_test.cpp
+        page_update_test page_update_test.cpp
+        page_manager_test page_manager_test.cpp
+        field_value_test field_value_test.cpp
+        tuple_header_test tuple_header_test.cpp
+        tuple_serializer_test tuple_serializer_test.cpp
+        tuple_builder_test tuple_builder_test.cpp
+        tuple_accessor_test tuple_accessor_test.cpp
+        tuple_integration_test tuple_integration_test.cpp
+        crud_integration_test crud_integration_test.cpp
 )
 
 set(SOURCES
@@ -35,6 +44,18 @@ set(SOURCES
         ../src/storage/disk_manager.cpp
         ../include/storage/free_space_map.h
         ../src/storage/free_space_map.cpp
+        ../include/storage/page_manager.h
+        ../src/storage/page_manager.cpp
+        ../include/tuple/field_value.h
+        ../src/tuple/field_value.cpp
+        ../include/tuple/tuple_header.h
+        ../src/tuple/tuple_header.cpp
+        ../include/tuple/tuple_serializer.h
+        ../src/tuple/tuple_serializer.cpp
+        ../include/tuple/tuple_builder.h
+        ../src/tuple/tuple_builder.cpp
+        ../include/tuple/tuple_accessor.h
+        ../src/tuple/tuple_accessor.cpp
         schema_test.cpp
 )
 

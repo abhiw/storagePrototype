@@ -75,9 +75,10 @@ DiskManager::ErrorCode DiskManager::OpenDBFile() {
     memset(&file_header_, 0, sizeof(FileHeader));
     memcpy(file_header_.magic_number, "STOR", 4);
     file_header_.version = 1;
-    file_header_.next_page_id = 0;
+    file_header_.next_page_id = 1;  // Start from 1 (0 is INVALID_PAGE_ID)
     file_header_.page_size_ = PAGE_SIZE;
     file_header_.page_count_ = 0;
+    next_page_id_ = 1;  // Initialize next_page_id_
 
     // Write header to file using pwrite()
     ssize_t bytes_written =

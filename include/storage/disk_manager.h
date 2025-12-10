@@ -1,5 +1,5 @@
-#ifndef STORAGEENGINE_SCHEMA_H
-#define STORAGEENGINE_SCHEMA_H
+#ifndef STORAGEENGINE_DISK_MANAGER_H
+#define STORAGEENGINE_DISK_MANAGER_H
 
 // DiskManager provides low-level file I/O operations for database pages.
 // It abstracts OS-level system calls, handles file layout, ensures data
@@ -60,4 +60,4 @@ class DiskManager {
   } file_header_;
 };
 
-#endif  // STORAGEENGINE_SCHEMA_H//
+#endif  // STORAGEENGINE_DISK_MANAGER_H

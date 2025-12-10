@@ -14,10 +14,10 @@ namespace fs = std::filesystem;
 class DiskManagerTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Ensure /tmp/claude directory exists
-    fs::create_directories("/tmp/claude");
+    // Ensure /tmp/test directory exists
+    fs::create_directories("/tmp/test");
     test_db_file_ =
-        "/tmp/claude/test_db_" + std::to_string(GetTestId()) + ".db";
+        "/tmp/test/test_db_" + std::to_string(GetTestId()) + ".db";
     CleanupTestFile();
   }
 
@@ -81,10 +81,10 @@ TEST_F(DiskManagerTest, AllocateSinglePage) {
   DiskManager disk_manager(test_db_file_);
 
   page_id_t page_id = disk_manager.AllocatePage();
-  EXPECT_EQ(page_id, 0);
+  EXPECT_EQ(page_id, 1);
 
   page_id_t page_id2 = disk_manager.AllocatePage();
-  EXPECT_EQ(page_id2, 1);
+  EXPECT_EQ(page_id2, 2);
 }
 
 // Test: Allocate multiple pages
@@ -96,7 +96,7 @@ TEST_F(DiskManagerTest, AllocateMultiplePages) {
 
   for (int i = 0; i < num_pages; i++) {
     page_id_t page_id = disk_manager.AllocatePage();
-    EXPECT_EQ(page_id, i);
+    EXPECT_EQ(page_id, i + 1);
     allocated_pages.push_back(page_id);
   }
 
@@ -404,7 +404,7 @@ TEST_F(DiskManagerTest, LargeDataWriteRead) {
 // Test: Multiple database files simultaneously
 TEST_F(DiskManagerTest, MultipleDatabaseFiles) {
   std::string test_db_file2_ =
-      "/tmp/claude/test_db2_" + std::to_string(GetTestId()) + ".db";
+      "/tmp/test/test_db2_" + std::to_string(GetTestId()) + ".db";
 
   {
     DiskManager disk_manager1(test_db_file_);
@@ -459,15 +459,15 @@ TEST_F(DiskManagerTest, NextPageIdPersistence) {
   // Allocate some pages
   {
     DiskManager disk_manager(test_db_file_);
-    disk_manager.AllocatePage();  // 0
     disk_manager.AllocatePage();  // 1
     disk_manager.AllocatePage();  // 2
+    disk_manager.AllocatePage();  // 3
   }
 
   // Reopen and continue allocating
   {
     DiskManager disk_manager(test_db_file_);
     page_id_t page_id = disk_manager.AllocatePage();
-    EXPECT_EQ(page_id, 3);  // Should continue from where we left off
+    EXPECT_EQ(page_id, 4);  // Should continue from where we left off
   }
 }

@@ -8,20 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 
-enum DataType {
-  // 1
-  BOOLEAN,
-  TINYINT,
-  CHAR,
-  // 2
-  SMALLINT,
-  // 4
-  INTEGER,
-  FLOAT,
-  // 8
-  BIGINT,
-  DOUBLE
-};
+#include "../common/types.h"
 
 namespace alignment {
 size_t CalculateAlignment(DataType type);

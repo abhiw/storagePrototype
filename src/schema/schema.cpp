@@ -43,7 +43,6 @@ void Schema::AddColumn(const std::string& name, DataType type, bool is_nullable,
   // Create a new ColumnDefinition
   ColumnDefinition col(name, type, is_nullable, size_param);
   col.SetFieldIndex(columns_.size());
-  col.SetFixedSize(size_param);
 
   // Add to columns vector
   columns_.push_back(col);
@@ -99,17 +98,19 @@ void Schema::Finalize() {
   is_finalized_ = true;
 }
 
-size_t Schema::GetAlignment(DataType type) {
+size_t Schema::GetAlignment(DataType type) const {
   return alignment::CalculateAlignment(type);
 }
 
-size_t Schema::GetColumnCount() { return columns_.size(); }
+size_t Schema::GetColumnCount() const { return columns_.size(); }
 
-ColumnDefinition Schema::GetColumn(size_t index) { return columns_[index]; }
+ColumnDefinition Schema::GetColumn(size_t index) const {
+  return columns_[index];
+}
 
-ColumnDefinition Schema::GetColumn(const std::string& name) {
+ColumnDefinition Schema::GetColumn(const std::string& name) const {
   if (column_name_to_index_.count(name) > 0) {
-    uint16_t index = column_name_to_index_[name];
+    uint16_t index = column_name_to_index_.at(name);
     return columns_[index];
   }
   // If column not found, return a default ColumnDefinition
@@ -117,16 +118,16 @@ ColumnDefinition Schema::GetColumn(const std::string& name) {
   return ColumnDefinition("", BOOLEAN, false, 0);
 }
 
-bool Schema::HasColumn(const std::string& name) {
+bool Schema::HasColumn(const std::string& name) const {
   return column_name_to_index_.count(name) > 0;
 }
 
-bool Schema::IsFixedLength() { return is_fixed_length_; }
+bool Schema::IsFixedLength() const { return is_fixed_length_; }
 
-size_t Schema::GetTupleSize() { return tuple_size_; }
+size_t Schema::GetTupleSize() const { return tuple_size_; }
 
-size_t Schema::GetNullBitmapSize() { return null_bitmap_size_; }
+size_t Schema::GetNullBitmapSize() const { return null_bitmap_size_; }
 
-bool Schema::IsFinalized() { return is_finalized_; }
+bool Schema::IsFinalized() const { return is_finalized_; }
 
-uint32_t Schema::GetTableId() { return table_id_; }
+uint32_t Schema::GetTableId() const { return table_id_; }

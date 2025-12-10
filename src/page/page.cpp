@@ -510,8 +510,11 @@ void Page::CompactPage() const {
   }
 
   std::vector<TupleInfo> valid_tuples;
-  valid_tuples.reserve(GetHeader()->slot_count -
-                       GetHeader()->deleted_tuple_count_);
+  uint16_t expected_valid =
+      GetHeader()->slot_count > GetHeader()->deleted_tuple_count_
+          ? GetHeader()->slot_count - GetHeader()->deleted_tuple_count_
+          : 0;
+  valid_tuples.reserve(expected_valid);
 
   for (slot_id_t i = 0; i < GetHeader()->slot_count; i++) {
     SlotEntry slot = GetSlotEntry(i);
@@ -556,25 +559,29 @@ void Page::CompactPage() const {
   // Copy compacted data back to page (after page header)
   memcpy(page_data + header_size, temp_buffer.get(), new_offset);
 
-  // Renumber slots sequentially (0, 1, 2, ...)
-  // This reclaims both data space and slot directory space
-  slot_id_t new_slot_id = 0;
+  // Update slot offsets WITHOUT renumbering (preserves external forwarding
+  // pointers)
   for (const auto& info : valid_tuples) {
-    SlotEntry& slot =
-        GetSlotEntry(new_slot_id);  // Write to new sequential position
+    SlotEntry& slot = GetSlotEntry(info.original_slot_id);
     slot.offset = info.offset;
     slot.length = info.length;
-    slot.flags = info.flags;
-    slot.next_ptr[0] = info.next_ptr[0];
-    slot.next_ptr[1] = info.next_ptr[1];
-    slot.next_ptr[2] = info.next_ptr[2];
-    new_slot_id++;
+  }
+
+  // Clear deleted slots by marking them invalid
+  for (slot_id_t i = 0; i < GetHeader()->slot_count; i++) {
+    SlotEntry* slot = GetSlotEntryPtr(i);
+    if (slot && !(slot->flags & SLOT_VALID)) {
+      slot->offset = 0;
+      slot->length = 0;
+      slot->flags = 0;
+      slot->next_ptr[0] = 0;
+      slot->next_ptr[1] = 0;
+      slot->next_ptr[2] = 0;
+    }
   }
 
   // Update page header
   GetHeader()->free_start = header_size + new_offset;
-  GetHeader()->free_end = PAGE_SIZE - (new_slot_id * SLOT_ENTRY_SIZE);
-  GetHeader()->slot_count = new_slot_id;
   GetHeader()->deleted_tuple_count_ = 0;
   GetHeader()->fragmented_bytes_ = 0;
 
@@ -593,18 +600,6 @@ size_t Page::GetAvailableFreeSpace() const {
   uint16_t free_start = header->free_start;
   uint16_t free_end = header->free_end;
 
-  // Ensure free_end >= free_start to avoid underflow
-  if (free_end < free_start && !ShouldCompact()) {
-    LOG_ERROR_STREAM("Page::GetAvailableFreeSpace: Invalid free space pointers "
-                     << "(free_start: " << free_start
-                     << ", free_end: " << free_end << ")");
-    return 0;
-  }
-
-  CompactPage();
-
-  free_start = header->free_start;
-  free_end = header->free_end;
   if (free_end < free_start) {
     LOG_ERROR_STREAM("Page::GetAvailableFreeSpace: Invalid free space pointers "
                      << "(free_start: " << free_start
@@ -621,7 +616,6 @@ slot_id_t Page::FindDeletedSlot() const {
 
   // Iterate through all existing slots to find an invalid (deleted) one
   for (slot_id_t slot_id = 0; slot_id < slot_count; ++slot_id) {
-    // Use IsSlotValid() which properly checks the VALID flag
     if (!IsSlotValid(slot_id)) {
       LOG_INFO_STREAM("Page::FindDeletedSlot: Found deleted slot "
                       << slot_id << " on page " << header->page_id);
@@ -633,7 +627,7 @@ slot_id_t Page::FindDeletedSlot() const {
   return INVALID_SLOT_ID;
 }
 
-void Page::RecomputeFragmentationStats() {
+void Page::RecomputeFragmentationStats() const {
   GetHeader()->deleted_tuple_count_ = 0;
   GetHeader()->fragmented_bytes_ = 0;
 
@@ -646,8 +640,8 @@ void Page::RecomputeFragmentationStats() {
   }
 }
 
-ErrorCode Page::DeleteTuple(uint16_t slot_id) {
-  if (slot_id > GetSlotCount()) {
+ErrorCode Page::DeleteTuple(uint16_t slot_id) const {
+  if (slot_id >= GetSlotCount()) {
     LOG_ERROR_STREAM("Page::DeleteTuple: Invalid slot id " << slot_id);
     return ErrorCode{-1, "Page::DeleteTuple: Invalid slot id "};
   }
@@ -705,4 +699,242 @@ bool Page::ShouldCompact() const {
   }
 
   return false;
+}
+
+ErrorCode Page::UpdateTupleInPlace(slot_id_t slot_id, const char* new_data,
+                                   uint16_t new_size) const {
+  if (page_buffer_.get() == nullptr) {
+    LOG_ERROR("Page::UpdateTupleInPlace: Page buffer is null");
+    return ErrorCode{-1, "Page::UpdateTupleInPlace: Page buffer is null"};
+  }
+
+  if (new_data == nullptr) {
+    LOG_ERROR("Page::UpdateTupleInPlace: New data is null");
+    return ErrorCode{-2, "Page::UpdateTupleInPlace: New data is null"};
+  }
+
+  if (new_size == 0) {
+    LOG_ERROR("Page::UpdateTupleInPlace: New size is zero");
+    return ErrorCode{-3, "Page::UpdateTupleInPlace: New size is zero"};
+  }
+
+  PageHeader* header = GetHeader();
+
+  // Check if slot_id is valid
+  if (slot_id >= header->slot_count) {
+    LOG_ERROR_STREAM("Page::UpdateTupleInPlace: Invalid slot id " << slot_id);
+    return ErrorCode{-4, "Page::UpdateTupleInPlace: Invalid slot id " +
+                             std::to_string(slot_id)};
+  }
+
+  SlotEntry* slot_entry = GetSlotEntryPtr(slot_id);
+  if (slot_entry == nullptr) {
+    LOG_ERROR_STREAM(
+        "Page::UpdateTupleInPlace: Failed to get slot entry for slot "
+        << slot_id);
+    return ErrorCode{-5, "Page::UpdateTupleInPlace: Failed to get slot entry"};
+  }
+
+  if (!(slot_entry->flags & SLOT_VALID)) {
+    LOG_ERROR_STREAM("Page::UpdateTupleInPlace: Slot " << slot_id
+                                                       << " is not valid");
+    return ErrorCode{-6, "Page::UpdateTupleInPlace: Slot is not valid"};
+  }
+
+  // Check if slot is forwarded cannot update forwarded slots in place
+  if (slot_entry->flags & SLOT_FORWARDED) {
+    LOG_ERROR_STREAM("Page::UpdateTupleInPlace: Slot " << slot_id
+                                                       << " is forwarded");
+    return ErrorCode{-7, "Page::UpdateTupleInPlace: Slot is forwarded"};
+  }
+
+  // Check if new size fits in the current slot
+  if (new_size > slot_entry->length) {
+    LOG_WARNING_STREAM("Page::UpdateTupleInPlace: New size "
+                       << new_size << " exceeds current size "
+                       << slot_entry->length);
+    return ErrorCode{-8,
+                     "Page::UpdateTupleInPlace: New size exceeds current size"};
+  }
+
+  // Perform in place update
+  auto* page_data = reinterpret_cast<uint8_t*>(page_buffer_.get());
+  std::memcpy(page_data + slot_entry->offset, new_data, new_size);
+
+  slot_entry->length = new_size;
+  header->is_dirty_ = true;
+  const uint32_t new_checksum = ComputeChecksum();
+  header->checksum = new_checksum;
+
+  LOG_INFO_STREAM(
+      "Page::UpdateTupleInPlace: Successfully updated tuple at slot "
+      << slot_id << " on page " << header->page_id << " (new size: " << new_size
+      << ")");
+
+  return ErrorCode{0, "Page::UpdateTupleInPlace: Success"};
+}
+
+ErrorCode Page::MarkSlotForwarded(slot_id_t slot_id, page_id_t target_page_id,
+                                  slot_id_t target_slot_id) const {
+  if (page_buffer_.get() == nullptr) {
+    LOG_ERROR("Page::MarkSlotForwarded: Page buffer is null");
+    return ErrorCode{-1, "Page::MarkSlotForwarded: Page buffer is null"};
+  }
+
+  PageHeader* header = GetHeader();
+
+  if (slot_id >= header->slot_count) {
+    LOG_ERROR_STREAM("Page::MarkSlotForwarded: Invalid slot id " << slot_id);
+    return ErrorCode{-2, "Page::MarkSlotForwarded: Invalid slot id " +
+                             std::to_string(slot_id)};
+  }
+
+  SlotEntry* slot_entry = GetSlotEntryPtr(slot_id);
+  if (slot_entry == nullptr) {
+    LOG_ERROR_STREAM(
+        "Page::MarkSlotForwarded: Failed to get slot entry for slot "
+        << slot_id);
+    return ErrorCode{-3, "Page::MarkSlotForwarded: Failed to get slot entry"};
+  }
+
+  if (!(slot_entry->flags & SLOT_VALID)) {
+    LOG_ERROR_STREAM("Page::MarkSlotForwarded: Slot " << slot_id
+                                                      << " is not valid");
+    return ErrorCode{-4, "Page::MarkSlotForwarded: Slot is not valid"};
+  }
+
+  // Mark the tuple data as reclaimed since it's forwarded
+  // This allows the space to be reclaimed during compaction
+  const uint16_t old_length = slot_entry->length;
+  slot_entry->length = 0;
+  SetForwardingPointer(slot_id, target_page_id, target_slot_id);
+  header->fragmented_bytes_ += old_length;
+  header->is_dirty_ = true;
+
+  const uint32_t new_checksum = ComputeChecksum();
+  header->checksum = new_checksum;
+
+  LOG_INFO_STREAM("Page::MarkSlotForwarded: Marked slot "
+                  << slot_id << " as forwarded to page " << target_page_id
+                  << ", slot " << target_slot_id);
+
+  return ErrorCode{0, "Page::MarkSlotForwarded: Success"};
+}
+
+TupleId Page::FollowForwardingChain(slot_id_t slot_id, int max_hops) const {
+  TupleId result = {0, 0};
+
+  if (page_buffer_.get() == nullptr) {
+    LOG_ERROR("Page::FollowForwardingChain: Page buffer is null");
+    return result;
+  }
+
+  PageHeader* header = GetHeader();
+
+  if (header->slot_count == 0 || slot_id >= header->slot_count) {
+    LOG_ERROR_STREAM("Page::FollowForwardingChain: Invalid slot id "
+                     << slot_id << " (slot_count: " << header->slot_count
+                     << ")");
+    return result;
+  }
+
+  // Track visited slots to detect circular chains
+  struct VisitedSlot {
+    page_id_t page_id;
+    slot_id_t slot_id;
+
+    bool operator==(const VisitedSlot& other) const {
+      return page_id == other.page_id && slot_id == other.slot_id;
+    }
+  };
+
+  std::vector<VisitedSlot> visited;
+  visited.reserve(max_hops);
+
+  page_id_t current_page_id = header->page_id;
+  slot_id_t current_slot_id = slot_id;
+
+  // Follow the chain allow up to max_hops + 1 iterations
+  // so we can check the final destination after following max_hops
+  for (int hop = 0; hop <= max_hops; ++hop) {
+    // Check for circular reference
+    VisitedSlot current_visit = {current_page_id, current_slot_id};
+    for (const auto& visited_slot : visited) {
+      if (visited_slot == current_visit) {
+        // Circular chain detected
+        LOG_WARNING_STREAM(
+            "Page::FollowForwardingChain: Circular chain detected at page "
+            << current_page_id << ", slot " << current_slot_id);
+        result.page_id = 0;
+        result.slot_id = 0;
+        return result;
+      }
+    }
+
+    visited.push_back(current_visit);
+
+    // Check if current slot is on this page
+    if (current_page_id != header->page_id) {
+      result.page_id = current_page_id;
+      result.slot_id = current_slot_id;
+      LOG_INFO_STREAM(
+          "Page::FollowForwardingChain: Followed chain to different page "
+          << current_page_id << ", slot " << current_slot_id);
+      return result;
+    }
+
+    // Get the slot entry
+    if (current_slot_id >= header->slot_count) {
+      LOG_ERROR_STREAM("Page::FollowForwardingChain: Invalid slot id in chain "
+                       << current_slot_id);
+      result.page_id = 0;
+      result.slot_id = 0;
+      return result;
+    }
+
+    SlotEntry* slot_entry = GetSlotEntryPtr(current_slot_id);
+    if (slot_entry == nullptr) {
+      LOG_ERROR_STREAM(
+          "Page::FollowForwardingChain: Failed to get slot entry for slot "
+          << current_slot_id);
+      result.page_id = 0;
+      result.slot_id = 0;
+      return result;
+    }
+
+    if (!(slot_entry->flags & SLOT_VALID)) {
+      LOG_ERROR_STREAM("Page::FollowForwardingChain: Slot " << current_slot_id
+                                                            << " is not valid");
+      result.page_id = 0;
+      result.slot_id = 0;
+      return result;
+    }
+
+    if (!(slot_entry->flags & SLOT_FORWARDED)) {
+      result.page_id = current_page_id;
+      result.slot_id = current_slot_id;
+      LOG_INFO_STREAM(
+          "Page::FollowForwardingChain: Found final destination at page "
+          << current_page_id << ", slot " << current_slot_id << " after " << hop
+          << " hops");
+      return result;
+    }
+
+    if (hop >= max_hops) {
+      // Reached max_hops without finding a non-forwarded slot
+      LOG_WARNING_STREAM("Page::FollowForwardingChain: Reached max hops ("
+                         << max_hops << ")");
+      result.page_id = 0;
+      result.slot_id = 0;
+      return result;
+    }
+
+    TupleId next = GetForwardingPointer(current_slot_id);
+    current_page_id = next.page_id;
+    current_slot_id = next.slot_id;
+  }
+
+  result.page_id = 0;
+  result.slot_id = 0;
+  return result;
 }

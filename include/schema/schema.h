@@ -30,8 +30,8 @@ class ColumnDefinition {
     field_index_ = 0;
     offset_ = 0;
 
-    if (size_t determined_fixed =
-            (alignment::GetFixedSize(data_type_, size_param) > 0)) {
+    size_t determined_fixed = alignment::GetFixedSize(data_type_, size_param);
+    if (determined_fixed > 0) {
       fixed_size_ = determined_fixed;
       max_size_ = determined_fixed;
     } else {
@@ -93,17 +93,18 @@ class Schema {
   void AddColumn(const std::string& name, DataType type, bool is_nullable,
                  size_t size_param);
   void Finalize();
-  size_t GetAlignment(DataType type);
-  size_t GetColumnCount();                   // returns columns.size()
-  ColumnDefinition GetColumn(size_t index);  // returns columns[index]
+  size_t GetAlignment(DataType type) const;
+  size_t GetColumnCount() const;                   // returns columns.size()
+  ColumnDefinition GetColumn(size_t index) const;  // returns columns[index]
   ColumnDefinition GetColumn(
-      const std::string& name);             // lookup in map, return column
-  bool HasColumn(const std::string& name);  // check map.count(name) > 0
-  bool IsFixedLength();                     // returns is_fixed_length
-  size_t GetTupleSize();  // returns tuple_size (only valid after Finalize())
-  size_t GetNullBitmapSize();  // returns null_bitmap_size
-  bool IsFinalized();          // returns is_finalized
-  uint32_t GetTableId();
+      const std::string& name) const;  // lookup in map, return column
+  bool HasColumn(const std::string& name) const;  // check map.count(name) > 0
+  bool IsFixedLength() const;                     // returns is_fixed_length
+  size_t GetTupleSize()
+      const;  // returns tuple_size (only valid after Finalize())
+  size_t GetNullBitmapSize() const;  // returns null_bitmap_size
+  bool IsFinalized() const;          // returns is_finalized
+  uint32_t GetTableId() const;
 };
 
 #endif  // STORAGEENGINE_SCHEMA_H
