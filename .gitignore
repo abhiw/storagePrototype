@@ -40,7 +40,6 @@ build/
 debug/
 release/
 cmake-build-*/
-tasks.md
 /build_test/
 
 # CMake files:
@@ -69,3 +68,13 @@ compile_commands.json
 .svn/
 .hg/
 /build_test/_deps/
+
+# CLI-related files:
+data/
+*.db
+*.fsm
+*.schema
+test_cli.sh
+storage_engine
+src/cli/
+include/cli/

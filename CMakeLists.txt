@@ -85,6 +85,23 @@ set(STORAGE_ENGINE_SOURCES
         src/schema/alignment.cpp
         include/schema/schema.h
         src/schema/schema.cpp
+        include/storage/disk_manager.h
+        src/storage/disk_manager.cpp
+        include/storage/free_space_map.h
+        src/storage/free_space_map.cpp
+        include/storage/page_manager.h
+        src/storage/page_manager.cpp
+        include/tuple/field_value.h
+        src/tuple/field_value.cpp
+        include/tuple/tuple_header.h
+        src/tuple/tuple_header.cpp
+        include/tuple/tuple_builder.h
+        src/tuple/tuple_builder.cpp
+        include/tuple/tuple_accessor.h
+        src/tuple/tuple_accessor.cpp
+        include/tuple/tuple_serializer.h
+        src/tuple/tuple_serializer.cpp
+        src/tuple/tuple_serializer.cpp
 )
 
 # Main executable
